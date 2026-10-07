@@ -6,7 +6,7 @@ built with Vite and TypeScript. It talks only to the local analytics API on
 stores no tokens and makes no external requests.
 
 The interface is defined by `../../docs/dms-analytics/api-contract.yaml`.
-The decisions behind this app are recorded as D201 to D212 in
+The decisions behind this app are recorded as D201 to D219 in
 `../../docs/dms-analytics/DECISIONS.md`.
 
 ## Screens
@@ -52,6 +52,79 @@ state:
 
 The mock is used only by `dev:mock` and `build:mock`. The production
 build (`npm run build`) contains neither MSW nor the synthetic data.
+
+## Portal (export & upload)
+
+The portal is a single HTML file that runs the 11 controls on a file you
+export from iManage Work yourself. It needs no backend, no installation
+and no network connection. It is described in D213 to D219.
+
+```bash
+npm run build:portal    # type-checks, then writes dist-portal/index.html (about 1.6 MB)
+npm run e2e:portal      # builds it, then runs the file:// smoke test (Playwright)
+npm run parity:fixture  # regenerates the engine parity fixture from the Python engine
+```
+
+### 1. Export from iManage Work (web)
+
+Menu names vary between iManage versions and library configurations.
+
+1. Run a document search that covers the matters you want to review, for
+   example by client, by matter or by a date range.
+2. Show the columns you need. At least these: **Name** (or Description),
+   **Number**, **Version**, **Class**, **Subclass**, **Created**,
+   **Edited**, **Client** and **Matter**. Add **Workspace**, **Author** and
+   **Operator** if you have them.
+3. Select the results (Select all), then choose **Export** and save the file
+   as Excel (.xlsx) or CSV. Export may sit under **More** or the **…** menu.
+4. Optional: export a matter or workspace list with client, matter, matter
+   name, practice area, partner, responsible fee earner, office, status, open
+   and close dates, matter type and key date. Without it, opening dates come
+   from the earliest document, every matter counts as open, profile fields
+   show "Unassigned" and CD1 is Unknown.
+
+The export contains only what your own iManage access rights let you see.
+
+### 2. Open the portal locally
+
+Copy `dist-portal/index.html` to your laptop and double-click it. It opens in
+Edge from `file://`. Drop the export on **Document list** (and optionally the
+matter list), or select **Load sample export** to try it with an invented
+firm. Then:
+
+1. **Match columns.** Columns are suggested from the header names and can be
+   corrected. The date format is detected; day first (31/01/2026) is the
+   default. A preview of 5 rows and a count of unreadable dates show what will
+   be read.
+2. **Document types.** Assign each class (and class + subclass) to a control
+   document type, add name rules (for example, a name containing "attendance
+   note"), and adjust the thresholds.
+3. **Run.** The dashboard (Portfolio, Controls, Exceptions, Matters, Key
+   dates, Lexcel sampling) opens on your data.
+
+The same file can also be hosted as a private page. It needs no service
+worker, downloads, `confirm()`, printing or external requests.
+
+### Privacy model
+
+- The file is read inside the browser tab. Nothing is uploaded or sent
+  anywhere. The page's Content Security Policy blocks every connection
+  (`connect-src 'none'`), and its in-page API refuses any request that is
+  not its own.
+- Imported rows are held in memory only. Closing or reloading the tab, or
+  selecting **Clear data**, discards them. They are never written to
+  localStorage, sessionStorage or IndexedDB.
+- Only the settings are remembered in the browser: column mapping,
+  document-type mapping and thresholds. Use **Copy settings** and **Paste
+  settings** to share them with a colleague. They contain no rows.
+- All imported text is shown as plain text. Exports are **Copy as CSV**
+  (clipboard), with the same protection against spreadsheet formula
+  injection as the app's CSV export.
+- Results show filing evidence in the export, not whether a step happened.
+  An export can also lack things that the API sync provides: workspace
+  creation dates and profile fields (unless you add a matter list), every
+  document version, folder-level filing, documents you cannot see, and
+  trends, because each import is a single snapshot.
 
 ## Run against the local backend
 

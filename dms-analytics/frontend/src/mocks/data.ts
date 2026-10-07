@@ -79,8 +79,10 @@ const MATTER_TYPES_EXEMPT = new Set(['Will review', 'Contract review']);
 
 export interface MockMatter extends MatterSummary {
   controls: ControlResult[];
-  first_substantive_at: string;
+  first_substantive_at: string | null;
   doc_type_counts: { canonical_type: string | null; count: number }[];
+  /** A precomputed filing timeline (imported data); otherwise one is derived. */
+  timeline?: TimelineEvent[];
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -291,15 +293,15 @@ export function generateMatters(count = 412, seed = 20261006): MockMatter[] {
 
 export function toSummary(m: MockMatter): MatterSummary {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { controls, first_substantive_at, doc_type_counts, ...rest } = m;
+  const { controls, first_substantive_at, doc_type_counts, timeline, ...rest } = m;
   return rest;
 }
 
 export function toDetail(m: MockMatter): MatterDetail {
-  const timeline: TimelineEvent[] = [
-    { at: m.opened_at, kind: 'opened', label: 'Workspace created', control_id: null },
-    { at: m.first_substantive_at, kind: 'first_substantive', label: 'First substantive document filed', control_id: null },
-  ];
+  if (m.timeline) return { ...toSummary(m), controls: m.controls, timeline: m.timeline, doc_type_counts: m.doc_type_counts };
+  const timeline: TimelineEvent[] = [{ at: m.opened_at, kind: 'opened', label: 'Workspace created', control_id: null }];
+  if (m.first_substantive_at)
+    timeline.push({ at: m.first_substantive_at, kind: 'first_substantive', label: 'First substantive document filed', control_id: null });
   for (const c of m.controls) {
     for (const e of c.evidence ?? []) {
       timeline.push({ at: e.filed_at, kind: 'evidence', label: e.name, control_id: c.control_id });

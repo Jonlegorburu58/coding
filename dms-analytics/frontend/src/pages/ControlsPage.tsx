@@ -6,7 +6,8 @@ import { ChartCard } from '../components/ChartCard';
 import { FilterBar } from '../components/FilterBar';
 import { PageHead } from '../components/Layout';
 import { StatusPill } from '../components/Badges';
-import { EmptyResults, ErrorState, Loading } from '../components/States';
+import { EmptyResults, ErrorState, Loading, SingleSnapshot } from '../components/States';
+import { useVariant } from '../lib/variant';
 import { RateBars } from '../charts/RateBars';
 import { TrendChart, TrendTable } from '../charts/TrendChart';
 import { ExportButton } from '../components/ExportButton';
@@ -80,6 +81,7 @@ function ControlDetail({ def, defs, tally, summaryState }: {
   const [dimension, setDimension] = useState<Dimension>('practice_area');
   const breakdown = useBreakdown(dimension, filters);
   const trend = useTrend(def.id);
+  const variant = useVariant();
   const dim = DIMENSIONS.find((d) => d.value === dimension)!;
   const bars = (breakdown.data?.rows ?? []).map((r) => {
     const c = r.cells.find((x) => x.control_id === def.id);
@@ -173,8 +175,9 @@ function ControlDetail({ def, defs, tally, summaryState }: {
         <ChartCard
           testId="card-control-trend"
           title="Trend"
-          subtitle={trend.data ? `${def.id} compliance rate (%), weekly snapshots, ${trendRangeLabel(trend.data.points)}. All visible matters.` : `${def.id} compliance rate (%)`}
+          subtitle={trend.data && variant.singleSnapshot && trend.data.points.length < 2 ? `${def.id} compliance rate (%), open matters. One snapshot so far.` : trend.data ? `${def.id} compliance rate (%), weekly snapshots, ${trendRangeLabel(trend.data.points)}. All visible matters.` : `${def.id} compliance rate (%)`}
           chart={trend.isPending ? <Loading /> : trend.isError ? <ErrorState error={trend.error} /> :
+            variant.singleSnapshot && trend.data.points.length < 2 ? <SingleSnapshot {...variant.singleSnapshot} /> :
             trend.data.points.length ? <TrendChart points={trend.data.points} yLabel="Compliance (%)" height={300} /> :
               <EmptyResults title="No snapshots yet">A snapshot is taken after every sync.</EmptyResults>}
           table={trend.data ? <TrendTable points={trend.data.points} valueLabel="Compliance" /> : null}

@@ -5,7 +5,8 @@ import type { Dimension } from '../api/types';
 import { ChartCard } from '../components/ChartCard';
 import { FilterBar } from '../components/FilterBar';
 import { PageHead } from '../components/Layout';
-import { EmptyResults, ErrorState, Loading } from '../components/States';
+import { EmptyResults, ErrorState, Loading, SingleSnapshot } from '../components/States';
+import { useVariant } from '../lib/variant';
 import { ControlBarList, ControlTallyTable, StatusLegend } from '../charts/ControlBarList';
 import { Heatmap, HeatmapTable, HeatScaleLegend } from '../charts/Heatmap';
 import { TrendChart, TrendTable } from '../charts/TrendChart';
@@ -29,6 +30,7 @@ export function PortfolioPage() {
   const controls = useControls();
   const breakdown = useBreakdown(dimension, filters);
   const trend = useTrend(undefined);
+  const variant = useVariant();
   const dimLabel = DIMENSIONS.find((d) => d.value === dimension)!.label;
 
   const head = (
@@ -100,12 +102,13 @@ export function PortfolioPage() {
               <ChartCard
                 testId="card-trend"
                 title="Readiness trend"
-                subtitle={trend.data ? `Portfolio readiness (%), weekly snapshots, ${trendRangeLabel(trend.data.points)}. All visible matters.` : 'Portfolio readiness (%)'}
+                subtitle={trend.data && variant.singleSnapshot && trend.data.points.length < 2 ? 'Portfolio readiness (%), open matters. One snapshot so far.' : trend.data ? `Portfolio readiness (%), weekly snapshots, ${trendRangeLabel(trend.data.points)}. All visible matters.` : 'Portfolio readiness (%)'}
                 actions={trend.data ? (
                   <ExportButton filename="readiness-trend" build={() => toCsv(['snapshot', 'readiness_pct', 'passing', 'applicable'],
                     trend.data.points.map((p) => [p.taken_at, p.value, p.passing, p.applicable]))} />
                 ) : null}
                 chart={trend.isPending ? <Loading /> : trend.isError ? <ErrorState error={trend.error} /> :
+                  variant.singleSnapshot && trend.data.points.length < 2 ? <SingleSnapshot {...variant.singleSnapshot} /> :
                   trend.data.points.length ? <TrendChart points={trend.data.points} yLabel="Readiness (%)" /> :
                     <EmptyResults title="No snapshots yet">A snapshot is taken after every sync.</EmptyResults>}
                 table={trend.data ? <TrendTable points={trend.data.points} valueLabel="Readiness" /> : null}

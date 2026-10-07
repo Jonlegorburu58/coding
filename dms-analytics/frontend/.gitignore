@@ -4,3 +4,4 @@ dist-mock
 test-results
 playwright-report
 dist-demo
+dist-portal

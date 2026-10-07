@@ -6,6 +6,7 @@ import { fmtDateTime, fmtInt, fmtRelative } from '../lib/format';
 import { filterQuery, readFilters } from '../state/filters';
 import { ModeBadge } from './Badges';
 import { Icon } from './Icon';
+import { useVariant } from '../lib/variant';
 import { Loading, NoDataState, ErrorState } from './States';
 
 const NAV = [
@@ -33,6 +34,7 @@ export function Layout() {
     prev.current = now;
   }, [sync.data?.state, qc]);
 
+  const variant = useVariant();
   const s = session.data;
   const run = sync.data?.current;
   const pct = run && run.workspaces_total ? Math.round((100 * run.workspaces_done) / run.workspaces_total) : null;
@@ -58,17 +60,24 @@ export function Layout() {
             </NavLink>
           ))}
           <div className="nav-section">App</div>
-          <NavLink to="/settings" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
-            <Icon name="settings" /> Sync &amp; settings
-          </NavLink>
+          {variant.appNav ? (
+            <NavLink to={variant.appNav.to} className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
+              <Icon name={variant.appNav.icon} /> {variant.appNav.label}
+            </NavLink>
+          ) : (
+            <NavLink to="/settings" className={({ isActive }) => `navlink${isActive ? ' active' : ''}`}>
+              <Icon name="settings" /> Sync &amp; settings
+            </NavLink>
+          )}
         </nav>
         <div className="sidenav-foot">
-          Read-only. Metadata only.<br />Data stays on this laptop.
+          {variant.sidenavFoot ?? <>Read-only. Metadata only.<br />Data stays on this laptop.</>}
         </div>
       </aside>
       <div className="main">
         <header className="topbar">
           <div className="topbar-meta">
+            {variant.topbar ?? <>
             <ModeBadge mode={s?.mode} />
             {s ? (
               <span title={s.last_sync_at ? fmtDateTime(s.last_sync_at) : undefined} data-testid="last-synced">
@@ -82,6 +91,7 @@ export function Layout() {
                 {s.signed_in ? (s.user_display_name ?? 'Signed in') : <Link to="/settings">Not signed in</Link>}
               </span>
             ) : null}
+            </>}
           </div>
         </header>
         <main id="main" className="content" tabIndex={-1}>
@@ -96,7 +106,7 @@ export function Layout() {
               {location.pathname !== '/settings' ? <Link to="/settings">View progress</Link> : null}
             </div>
           ) : null}
-          {s && s.has_data ? (
+          {variant.coverage !== undefined ? variant.coverage : s && s.has_data ? (
             <div className="coverage" data-testid="coverage">
               <Icon name="info" />
               <span>
@@ -116,9 +126,10 @@ export function Layout() {
 /** Shows first-run guidance instead of a data screen when nothing has been synced. */
 export function RequireData({ children }: { children: ReactNode }) {
   const session = useSession();
+  const { noData } = useVariant();
   if (session.isPending) return <Loading />;
   if (session.isError) return <ErrorState error={session.error} onRetry={() => void session.refetch()} />;
-  if (!session.data.has_data) return <div className="card"><NoDataState /></div>;
+  if (!session.data.has_data) return noData ? <>{noData}</> : <div className="card"><NoDataState /></div>;
   return <>{children}</>;
 }
 

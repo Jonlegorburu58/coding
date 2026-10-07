@@ -8,11 +8,13 @@ import { PageHead } from '../components/Layout';
 import { EmptyResults, ErrorState, Loading } from '../components/States';
 import { toCsv } from '../lib/csv';
 import { fmtDate, fmtDateTime } from '../lib/format';
+import { useVariant } from '../lib/variant';
 
 export function LexcelPage() {
   const settings = useSettings();
   const options = useFilterOptions();
   const sample = useLexcelSample();
+  const { canPrint } = useVariant();
   const [per, setPer] = useState<number | null>(null);
   const [seed, setSeed] = useState('');
   const [pa, setPa] = useState('');
@@ -85,7 +87,7 @@ export function LexcelPage() {
             </span>
             <span className="row no-print">
               <button type="button" className="btn small" onClick={() => setSeed(String(data.seed))}>Reuse seed</button>
-              <button type="button" className="btn small" onClick={() => window.print()}><Icon name="print" size={14} /> Print</button>
+              {canPrint ? <button type="button" className="btn small" onClick={() => window.print()}><Icon name="print" size={14} /> Print</button> : null}
               <ExportButton filename={`lexcel-sample-seed-${data.seed}`} build={() => toCsv(
                 ['seed', 'per_fee_earner', 'generated_at', 'fee_earner', 'matter_code', 'matter_name', 'client_name', 'practice_area', 'partner', 'opened', 'risk_score', 'failing_controls'],
                 data.items.flatMap((g) => g.matters.map((m) => [data.seed, data.per_fee_earner, data.generated_at, g.fee_earner.name, m.matter_code, m.matter_name,

@@ -148,6 +148,105 @@ the run was autonomous.** No endpoints were invented. Gaps are handled
 in the UI as described in D208 and D209, and listed in the agent's
 summary. Nothing is committed.
 
+**D213: A separate `portal` build: one self-contained HTML file.**
+`npm run build:portal` writes `dist-portal/index.html` (vite-plugin-singlefile,
+HashRouter). The portal is entered through a dynamic import guarded by
+`import.meta.env.MODE === 'portal'`, so `npm run build` and `build:demo`
+contain none of it (checked with grep on `dist/` and `dist-demo/`). Shared
+screens are adapted through a small `AppVariant` context (export button,
+top bar, coverage banner, navigation entry, no-data redirect, single-snapshot
+trend, print) whose default is the normal app, so production behaviour is
+unchanged. The file carries its own CSP meta: `default-src 'none';
+script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;
+connect-src 'none'; base-uri 'none'; form-action 'none'`. It was verified
+under `file://` in Chromium with no CSP violations. It was not tested inside
+a claude.ai frame from this environment; a host's own policy can only add
+restrictions, and the page needs nothing beyond the policy above.
+
+**D214: SheetJS 0.20.3 from the official SheetJS tarball** (not npm
+`xlsx@0.18`, which has known CVEs). Excel date cells arrive as serial
+numbers. CSV files are decoded by us (UTF-8, falling back to Windows-1252) and
+read with `raw: true`, so dates stay as text for our own day-first-aware
+parser. Formulas are never evaluated. Files over 60 MB or 300,000 rows are
+refused with a plain message. `npm audit` still reports the pre-existing
+advisory in `vite-plugin-singlefile`'s `micromatch`/`braces` (build-time only).
+
+**D215: Document types in the portal come from a class mapping, not
+`controls.yaml`.** The user assigns each Class (and Class + Subclass) a
+canonical type, pre-suggested by keyword. Precedence: Class + Subclass, then
+Class, then name rules, and name rules apply only to documents whose class is
+"Other", so an explicit class mapping always wins. "Intake" (not substantive)
+is decided by the resulting canonical type (file opening, conflict clearance,
+CDD, engagement letter, signed engagement letter, s.150 notice), not by a
+separate `intake_classes` list. That differs from the backend only where a
+name rule maps a document to an intake type. A control is "configured" when
+some mapping or name rule produces its type; otherwise it is `unknown`, as in
+the backend. "Signed" words become whole-word, case-insensitive patterns.
+
+**D216: The portal's API runs in the page and the network is switched off.**
+A `fetch` shim sends `/api/*` calls (including Windows `file:///C:/api/...`
+URLs) to the existing MSW handlers through `getResponse`. Requests are
+relabelled with the never-resolved origin `http://portal.invalid` so handler
+paths match on any host. Every other request is rejected without calling the
+real `fetch` (a unit test checks this), and the CSP has `connect-src 'none'`.
+The handlers now serve a swappable `MockDataset`. Mock and demo builds keep
+the synthetic firm. The portal sets `backendScopes`, so exceptions and the
+Lexcel sample cover open matters (D107). The Lexcel draw is the mock's seeded,
+risk-weighted draw, not Python's Mersenne Twister, so seeds are reproducible
+within the portal but not across portal and backend. A single import has
+one snapshot, so the trend shows "Trend needs more than one import" and
+draws no line.
+
+**D217: Imported rows live only in memory.** They are never written to
+localStorage, sessionStorage or IndexedDB (the e2e test checks all three after
+an import). Only the settings (column mapping, type mapping, thresholds,
+closed values, AML-exempt types, signed words) are remembered in
+localStorage, inside try/catch, and not at all for the sample. As a guard
+against a mis-detected header row or a wrong Class column, column names are
+stored only when the header row matched known iManage names, and class
+mappings only when the mapped Class column has a recognised header.
+"Copy settings" and "Paste settings" use the clipboard or a text box.
+"Clear data" drops the dataset and the query cache. In the portal, CSV
+buttons become "Copy as CSV": the same `toCsv` output, with its
+formula-injection escaping, goes to the clipboard inside the click handler.
+If the browser refuses, a select-all text box is shown. Print is hidden
+because sandboxed frames block it. MSW's cookie store can write to
+localStorage only on `Set-Cookie`, which no handler sends.
+
+**D218: Import semantics (conservative choices).**
+- Documents are grouped by Client + Matter. A numeric code ignores leading
+  zeros, because Excel drops them. Without a matter, documents are grouped by
+  Workspace. Rows with neither, or with no readable created date, are left
+  out and counted in the coverage notes.
+- Rows sharing a document number in one matter are versions. They are
+  combined into one document: created is the earliest, edited is the latest,
+  and name and class come from the highest version.
+- Without a matter list: opened is the earliest document's created date,
+  every matter is open, profile fields are "Unassigned", and CD1 is
+  `unknown`. The coverage banner says so.
+- With a matter list but no status column, a matter with a close date counts
+  as closed. Otherwise status follows "closed values" (default `CLOSED`), and
+  anything else is open (as in D104). Listed matters with no documents are
+  evaluated too.
+- Dates default to day first (Irish). The order is auto-detected from
+  unambiguous values and can be overridden. ISO dates, Excel serials and
+  dates with month names are all read. Values with an offset are converted
+  to UTC. "Now" is the real local time, treated as naive UTC like the
+  imported dates.
+- Engine explanations that mention `controls.yaml` are reworded for the
+  portal ("No key-date column is mapped in the import…").
+
+**D219: The TypeScript controls engine is a line-by-line port and is tested
+against the Python engine.** `scripts/parity_fixture.py` runs the backend
+engine (read-only, via `uv run --project ../backend`) on 262 synthetic
+matters under the bundled config, and on 120 under a reduced config. The
+reduced config produces `unknown` results. The script saves the inputs and
+the expected outcomes to `src/portal/__fixtures__/parity.json`.
+`engine.parity.test.ts` asserts that every field (status, explanation, due,
+evidence, days late, evidence IDs) and the risk score are identical, and that
+every status of every control occurs. Python's `round()` (ties to even, on
+the exact binary value) is reproduced by `pyRound`.
+
 **D100: DuckDB encryption at rest works, so the D4 fallback is not used.**
 DuckDB 1.4.1+ (1.5.6 locked) `ATTACH ... (ENCRYPTION_KEY ...)` is used
 with a random 256-bit key (hex) stored only in the OS keychain (entry

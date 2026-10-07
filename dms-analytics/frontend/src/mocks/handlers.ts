@@ -25,20 +25,8 @@ import type {
   SyncStatus,
   Trend,
 } from '../api/types';
-import {
-  CONTROLS,
-  FEE_EARNERS,
-  MOCK_NOW,
-  OFFICES,
-  PARTNERS,
-  PRACTICE_AREAS,
-  generateMatters,
-  generateTrend,
-  mulberry32,
-  toDetail,
-  toSummary,
-  type MockMatter,
-} from './data';
+import { MOCK_NOW, mulberry32, toDetail, toSummary, type MockMatter } from './data';
+import { currentDataset as ds, setDataset } from './dataset';
 
 export type MockScenario = 'default' | 'empty' | 'expired' | 'device' | 'syncing' | 'error';
 
@@ -55,8 +43,7 @@ interface MockState {
   latency: number;
 }
 
-const MATTERS: MockMatter[] = generateMatters();
-const SYNC_TOTAL = MATTERS.length;
+const syncTotal = () => ds().matters.length;
 /** A mock sync takes about 8 seconds. */
 const SYNC_MS = 8000;
 
@@ -77,7 +64,7 @@ function initialState(scenario: MockScenario = 'default'): MockState {
     last: hasData
       ? {
           id: 'run_041', kind: 'incremental', status: 'succeeded', started_at: '2026-10-06T20:55:00Z',
-          finished_at: MOCK_NOW.toISOString(), workspaces_done: SYNC_TOTAL, workspaces_total: SYNC_TOTAL,
+          finished_at: MOCK_NOW.toISOString(), workspaces_done: syncTotal(), workspaces_total: syncTotal(),
           documents_seen: 1203, error: null,
         }
       : null,
@@ -89,6 +76,7 @@ function initialState(scenario: MockScenario = 'default'): MockState {
 export const mockState: MockState = initialState();
 
 export function resetMockState(scenario: MockScenario = 'default', latency = 0) {
+  setDataset(null);
   Object.assign(mockState, initialState(scenario), { latency });
   if (scenario === 'syncing') startRun('full', Date.now() - SYNC_MS * 0.42);
 }
@@ -102,7 +90,7 @@ function startRun(kind: SyncRun['kind'], startedMs = Date.now()) {
     started_at: new Date(startedMs).toISOString(),
     finished_at: null,
     workspaces_done: 0,
-    workspaces_total: SYNC_TOTAL,
+    workspaces_total: syncTotal(),
     documents_seen: 0,
     error: null,
     startedMs,
@@ -121,7 +109,7 @@ function syncStatus(): SyncStatus {
   const run = mockState.running;
   if (run) {
     const frac = Math.min(1, (Date.now() - run.startedMs) / SYNC_MS);
-    run.workspaces_done = Math.floor(frac * SYNC_TOTAL);
+    run.workspaces_done = Math.floor(frac * syncTotal());
     run.documents_seen = Math.floor(frac * (run.kind === 'full' ? 38410 : 1300));
     if (run.cancelRequested) {
       mockState.last = { ...strip(run), status: 'cancelled', finished_at: new Date().toISOString() };
@@ -162,7 +150,7 @@ function scoped(q: Q, opts: { ignoreStatus?: boolean } = {}): MockMatter[] {
   const status = opts.ignoreStatus ? 'all' : (q.get('status') ?? 'open');
   const from = q.get('opened_from');
   const to = q.get('opened_to');
-  return MATTERS.filter((m) =>
+  return ds().matters.filter((m) =>
     (!pa || m.practice_area === pa) &&
     (!partner || m.partner?.id === partner) &&
     (!fe || m.fee_earner?.id === fe) &&
@@ -194,7 +182,8 @@ function readiness(ms: MockMatter[]): number | null {
 }
 
 function daysUntil(date: string): number {
-  const today = Date.UTC(MOCK_NOW.getUTCFullYear(), MOCK_NOW.getUTCMonth(), MOCK_NOW.getUTCDate());
+  const now = ds().now;
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return Math.round((Date.parse(`${date}T00:00:00Z`) - today) / 86_400_000);
 }
 
@@ -203,6 +192,9 @@ function paginate<T>(items: T[], q: Q) {
   const pageSize = Math.min(200, Math.max(1, Number(q.get('page_size') ?? 50) || 50));
   return { total: items.length, page, page_size: pageSize, items: items.slice((page - 1) * pageSize, page * pageSize) };
 }
+
+const pick = (q: Q, keys: string[]) =>
+  Object.fromEntries(keys.flatMap((k) => (q.get(k) ? [[k, q.get(k)!]] : [])));
 
 const cmpNullLast = (a: number | null, b: number | null, dir: 1 | -1) =>
   a === null ? 1 : b === null ? -1 : (a - b) * dir;
@@ -216,12 +208,12 @@ export const handlers = [
     return json<Session>({
       mode: 'mock',
       signed_in: mockState.signedIn,
-      user_display_name: mockState.signedIn ? 'Demo User' : null,
-      source_name: 'Mock iManage (synthetic data)',
+      user_display_name: mockState.signedIn ? ds().userDisplayName : null,
+      source_name: ds().sourceName,
       has_data: mockState.hasData,
       last_sync_at: mockState.lastSyncAt,
       coverage: mockState.hasData
-        ? { libraries: 1, workspaces_visible: MATTERS.length, documents: MATTERS.reduce((a, m) => a + m.doc_count, 0) }
+        ? ds().coverage
         : { libraries: 0, workspaces_visible: 0, documents: 0 },
     });
   }),
@@ -267,18 +259,14 @@ export const handlers = [
 
   http.get('/api/filters', async () => {
     const g = await gate(); if (g) return g;
-    return json<Filters>({
-      practice_areas: mockState.hasData ? PRACTICE_AREAS : [],
-      partners: mockState.hasData ? PARTNERS : [],
-      fee_earners: mockState.hasData ? FEE_EARNERS : [],
-      offices: mockState.hasData ? OFFICES : [],
-      opened_range: mockState.hasData ? { min: '2019-10-03', max: '2026-10-03' } : { min: null, max: null },
+    return json<Filters>(mockState.hasData ? ds().filters : {
+      practice_areas: [], partners: [], fee_earners: [], offices: [], opened_range: { min: null, max: null },
     });
   }),
 
   http.get('/api/controls', async () => {
     const g = await gate(); if (g) return g;
-    return json(CONTROLS);
+    return json(ds().controls);
   }),
 
   http.get('/api/portfolio/summary', async ({ request }) => {
@@ -294,9 +282,9 @@ export const handlers = [
       high_risk_matters: ms.filter((m) => (m.risk_score ?? 0) >= 50).length,
       exceptions_open: ms.reduce((a, m) => a + m.failing_controls.length, 0),
       upcoming_key_dates: { d30: kd(30), d60: kd(60), d90: kd(90) },
-      controls: CONTROLS.map((c) => tally(ms, c.id)),
+      controls: ds().controls.map((c) => tally(ms, c.id)),
       coverage_note: mockState.hasData
-        ? `Based on ${MATTERS.length} workspaces visible to you in 1 library.`
+        ? ds().coverageNote
         : 'No workspaces have been synced yet.',
     });
   }),
@@ -325,7 +313,7 @@ export const handlers = [
       .sort((a, b) => a[1].label.localeCompare(b[1].label))
       .map(([key, { label, ms }]) => ({
         key, label, matters: ms.length, readiness: readiness(ms),
-        cells: CONTROLS.map((c) => {
+        cells: ds().controls.map((c) => {
           const t = tally(ms, c.id);
           return { control_id: c.id, applicable: t.applicable, passing: t.pass, compliance_rate: t.compliance_rate };
         }),
@@ -340,7 +328,7 @@ export const handlers = [
     const from = q.get('from');
     const to = q.get('to');
     const points = mockState.hasData
-      ? generateTrend(id).filter((p) => (!from || p.taken_at.slice(0, 10) >= from) && (!to || p.taken_at.slice(0, 10) <= to))
+      ? ds().trend(id).filter((p) => (!from || p.taken_at.slice(0, 10) >= from) && (!to || p.taken_at.slice(0, 10) <= to))
       : [];
     return json<Trend>({ control_id: id, points });
   }),
@@ -373,7 +361,7 @@ export const handlers = [
 
   http.get('/api/matters/:id', async ({ params }) => {
     const g = await gate(); if (g) return g;
-    const m = mockState.hasData ? MATTERS.find((x) => x.id === params.id) : undefined;
+    const m = mockState.hasData ? ds().matters.find((x) => x.id === params.id) : undefined;
     if (!m) return err(404, 'not_found', 'That matter could not be found. It may no longer be visible to you.');
     return json(toDetail(m));
   }),
@@ -385,14 +373,14 @@ export const handlers = [
     const status = q.get('status');
     const sort = q.get('sort') ?? 'severity_desc';
     const items: ExceptionItem[] = [];
-    for (const m of scoped(q, { ignoreStatus: true })) {
+    for (const m of scoped(q, { ignoreStatus: !ds().backendScopes })) {
       for (const c of m.controls) {
         if (c.status !== 'late' && c.status !== 'missing' && c.status !== 'stale') continue;
         if (control && c.control_id !== control) continue;
         if (status && c.status !== status) continue;
         items.push({
           matter: toSummary(m), control_id: c.control_id, status: c.status,
-          severity: CONTROLS.find((d) => d.id === c.control_id)?.severity ?? 1,
+          severity: ds().controls.find((d) => d.id === c.control_id)?.severity ?? 1,
           days_late: c.days_late ?? null, due_at: c.due_at ?? null, explanation: c.explanation ?? '',
         });
       }
@@ -422,9 +410,10 @@ export const handlers = [
     const per = Math.min(10, Math.max(1, Number(q.get('per_fee_earner') ?? 2) || 2));
     const seed = q.get('seed') ? Number(q.get('seed')) : Math.floor(Math.random() * 900000) + 100000;
     const r = mulberry32(seed);
-    const pool = scoped(q, { ignoreStatus: true });
+    const pool = ds().backendScopes ? scoped(new URLSearchParams({ ...pick(q, ['practice_area', 'office']), status: 'open' }))
+      : scoped(q, { ignoreStatus: true });
     const items: LexcelSample['items'] = [];
-    for (const fe of FEE_EARNERS) {
+    for (const fe of ds().filters.fee_earners) {
       let candidates = pool.filter((m) => m.fee_earner?.id === fe.id);
       const chosen: MatterSummary[] = [];
       while (chosen.length < per && candidates.length) {

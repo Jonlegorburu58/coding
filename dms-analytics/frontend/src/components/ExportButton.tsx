@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { errorMessage } from '../api/client';
 import { saveCsv, stampedName } from '../lib/csv';
+import { useVariant, type ExportButtonProps } from '../lib/variant';
 import { Icon } from './Icon';
 
+/** The export button for this build variant (the portal copies instead of saving). */
+export function ExportButton(props: ExportButtonProps) {
+  const Override = useVariant().ExportButton;
+  return Override ? <Override {...props} /> : <SaveCsvButton {...props} />;
+}
+
 /** Builds the CSV on demand (may page through the API) and asks where to save it. */
-export function ExportButton({ build, filename, label = 'Export CSV', disabled }: {
-  build: () => Promise<string> | string;
-  filename: string;
-  label?: string;
-  disabled?: boolean;
-}) {
+function SaveCsvButton({ build, filename, label = 'Export CSV', disabled }: ExportButtonProps) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   async function onClick() {

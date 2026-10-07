@@ -37,6 +37,17 @@ export function NoDataState() {
   );
 }
 
+/** A trend with only one snapshot: no line is drawn (it would suggest a trend that does not exist). */
+export function SingleSnapshot({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="state" data-testid="single-snapshot">
+      <span className="ico-wrap"><Icon name="chart" size={20} /></span>
+      <h2>{title}</h2>
+      <p>{body}</p>
+    </div>
+  );
+}
+
 export function EmptyResults({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="state">

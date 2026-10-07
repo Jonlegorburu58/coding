@@ -1,0 +1,90 @@
+/* Portal build only (single-file export & upload page). Uses the app's tokens. */
+
+.badge-import {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--ink); border: 1px solid var(--accent);
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.badge-import.sample { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber-border); }
+.topbar-file { min-width: 0; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; counter-reset: step; }
+.steps li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink-3); font-size: 13px; font-weight: 550;
+}
+.steps li::before {
+  counter-increment: step; content: counter(step); width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface-3); color: var(--ink-2); font-size: 12px; font-weight: 650;
+}
+.steps li[aria-current='step'] { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+.steps li[aria-current='step']::before { background: var(--accent); color: var(--accent-ink); }
+.steps li.done { color: var(--ink-2); }
+.steps li.done::before { content: '\2713'; background: var(--accent-soft); color: var(--accent); }
+
+.import-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .import-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.dropzone {
+  border: 1.5px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface-2);
+  padding: 22px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  color: var(--ink-2); transition: border-color 0.15s, background 0.15s;
+}
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone.has-file { border-style: solid; align-items: stretch; text-align: left; }
+.dropzone .ico-wrap { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--ink-3); }
+.file-chip { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.file-chip .file-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.file-chip svg { color: var(--accent); flex: none; }
+
+table.data.map-table td { vertical-align: middle; }
+.map-table .select { width: 100%; max-width: 280px; }
+.map-table .sample { color: var(--ink-3); font-size: 12.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-table tr.sub td:first-child { padding-left: 38px; color: var(--ink-2); }
+.req { color: var(--danger-ink); font-weight: 700; margin-left: 2px; }
+.ok-ink { color: var(--success-ink); }
+.warn-ink { color: var(--amber-ink); }
+
+.rule-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px) auto; gap: 8px; align-items: center; }
+.threshold-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; }
+.threshold-grid .input { width: 110px; }
+
+.howto ol { margin: 6px 0 0; padding-left: 20px; color: var(--ink-2); }
+.howto li { margin: 4px 0; }
+.copy-area {
+  width: 100%; min-height: 180px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); padding: 8px;
+}
+.coverage details { flex-basis: 100%; }
+.coverage details summary { cursor: pointer; color: var(--accent); font-weight: 550; }
+.coverage details ul { margin: 6px 0 0; padding-left: 18px; }
+.coverage .grow { flex: 1 1 320px; min-width: 0; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); }
+.stat-row strong { color: var(--ink); }
+.sticky-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+
+/* Narrow screens (a phone, or a narrow preview frame): stack the navigation above the content. */
+@media (max-width: 760px) {
+  .shell { display: block; background: var(--page); }
+  .sidenav {
+    position: static; height: auto; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--grid);
+    flex-direction: column; gap: 6px;
+  }
+  .sidenav .brand { padding: 0 4px 8px; margin-bottom: 0; }
+  .sidenav nav { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+  .sidenav nav .nav-section { display: none; }
+  .sidenav a.navlink { white-space: nowrap; padding: 6px 10px; }
+  .sidenav-foot { display: none; }
+  .topbar { padding: 10px 16px; position: static; }
+  .topbar-meta { justify-content: flex-start; margin-left: 0; }
+  .content { padding: 14px 16px 40px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi.hero { grid-column: 1 / -1; }
+  dl.profile { grid-template-columns: minmax(0, 1fr); }
+  .page-head .actions { margin-left: 0; }
+  .rule-row { grid-template-columns: minmax(0, 1fr); }
+  .timeline li { grid-template-columns: 84px 16px minmax(0, 1fr); }
+  .topbar-file { max-width: 100%; }
+  .coverage .grow { flex: 1 1 0; }
+  .barlist-head, .barrow { grid-template-columns: minmax(0, 1.5fr) 38px minmax(56px, 1fr) 40px; gap: 8px; }
+}

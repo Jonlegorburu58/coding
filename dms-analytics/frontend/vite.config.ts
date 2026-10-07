@@ -32,18 +32,45 @@ function demoStripCsp(): Plugin {
   };
 }
 
+/**
+ * Portal build only: one self-contained file, opened from disk or hosted in a
+ * sandboxed frame. Everything is inlined, so the policy allows inline script and
+ * style and data: images only, and no connections at all (the in-page API never
+ * touches the network).
+ */
+export const PORTAL_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'";
+
+function portalHtml(): Plugin {
+  return {
+    name: 'portal-html',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html
+        .replace(/(<meta\s+http-equiv="Content-Security-Policy"\s+content=")[^"]*(")/, `$1${PORTAL_CSP}$2`)
+        .replace(/<title>[^<]*<\/title>/, '<title>BWS Risk Portal</title>');
+    },
+  };
+}
+
 const LOCAL_API = 'http://127.0.0.1:8765';
 
 export default defineConfig(({ mode }) => {
   const isMock = mode === 'mock';
   const isDemo = mode === 'demo';
+  const isPortal = mode === 'portal';
   return {
-    plugins: [react(), devCspRelax(), ...(isDemo ? [demoStripCsp(), viteSingleFile()] : [])],
+    plugins: [
+      react(),
+      devCspRelax(),
+      ...(isDemo ? [demoStripCsp(), viteSingleFile()] : []),
+      ...(isPortal ? [portalHtml(), viteSingleFile()] : []),
+    ],
     // The MSW service worker is only published in mock builds; production
     // builds have no public directory at all.
     publicDir: isMock ? 'mock-public' : false,
     build: {
-      outDir: isDemo ? 'dist-demo' : 'dist',
+      outDir: isDemo ? 'dist-demo' : isPortal ? 'dist-portal' : 'dist',
       sourcemap: false,
       chunkSizeWarningLimit: 900,
     },

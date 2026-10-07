@@ -10,6 +10,7 @@
     "build": "tsc --noEmit && vite build",
     "build:mock": "vite build --mode mock --outDir dist-mock",
     "build:demo": "vite build --mode demo",
+    "build:portal": "tsc --noEmit && vite build --mode portal",
     "preview:mock": "vite preview --mode mock --outDir dist-mock --port 5174 --strictPort",
     "build:embed": "npm run build && node scripts/embed.mjs",
     "typecheck": "tsc --noEmit",
@@ -18,14 +19,17 @@
     "test:watch": "vitest",
     "e2e": "playwright test --project=e2e",
     "e2e:csp": "playwright test --config playwright.csp.config.ts",
-    "screenshots": "playwright test --project=screenshots"
+    "screenshots": "playwright test --project=screenshots",
+    "e2e:portal": "npm run build:portal && playwright test --config playwright.portal.config.ts",
+    "parity:fixture": "uv run --project ../backend python scripts/parity_fixture.py"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^7.18.4",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
