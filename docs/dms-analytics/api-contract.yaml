@@ -1,0 +1,819 @@
+openapi: 3.1.0
+info:
+  title: BWS DMS Risk Analytics - local API
+  version: 1.0.0
+  description: |
+    Local, read-only API served on 127.0.0.1 by the analytics app. All `/api`
+    endpoints require the `session` cookie (issued by `/launch`) AND the header
+    `X-DMS-Analytics: 1`. Timestamps are ISO 8601 UTC. All example data is synthetic.
+servers:
+  - url: http://127.0.0.1:8765
+security:
+  - sessionCookie: []
+    appHeader: []
+tags:
+  - name: system
+  - name: auth
+  - name: sync
+  - name: portfolio
+  - name: matters
+  - name: lexcel
+  - name: data
+
+paths:
+  /launch:
+    get:
+      tags: [system]
+      summary: Exchange single-use launch code for session cookie, then redirect to UI
+      security: []
+      parameters:
+        - { name: code, in: query, required: true, schema: { type: string } }
+      responses:
+        "302": { description: Redirect to `/` with Set-Cookie `session` (HttpOnly; SameSite=Strict) }
+        "403": { description: "Code invalid, used or expired" }
+
+  /api/health:
+    get:
+      tags: [system]
+      summary: Liveness and app info
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+              example: { status: ok, version: "1.0.0", mode: mock }
+
+  /api/session:
+    get:
+      tags: [auth]
+      summary: Current sign-in and data state
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+              example:
+                mode: mock
+                signed_in: true
+                user_display_name: "Demo User"
+                source_name: "Mock iManage"
+                has_data: true
+                last_sync_at: "2026-10-06T21:00:00Z"
+                coverage: { libraries: 1, workspaces_visible: 412, documents: 38410 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/auth/sign-in:
+    post:
+      tags: [auth]
+      summary: Start delegated sign-in to the DMS (live mode). In mock mode completes immediately.
+      responses:
+        "200":
+          description: Sign-in started or completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignInStart" }
+              examples:
+                browser: { value: { status: browser_opened, verification_url: null, user_code: null } }
+                device: { value: { status: device_code, verification_url: "https://<IMANAGE_BASE_URL>/device", user_code: "ABCD-EFGH" } }
+                mock: { value: { status: signed_in, verification_url: null, user_code: null } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/auth/sign-out:
+    post:
+      tags: [auth]
+      summary: Remove DMS tokens from Credential Manager. Local data is kept.
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/sync/status:
+    get:
+      tags: [sync]
+      responses:
+        "200":
+          description: Latest or running sync
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncStatus" }
+              example:
+                state: idle
+                current: null
+                last:
+                  id: "run_01"
+                  kind: incremental
+                  status: succeeded
+                  started_at: "2026-10-06T20:55:00Z"
+                  finished_at: "2026-10-06T21:00:00Z"
+                  workspaces_done: 412
+                  workspaces_total: 412
+                  documents_seen: 1203
+                  error: null
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/sync/start:
+    post:
+      tags: [sync]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: { type: string, enum: [auto, full, reconcile], default: auto }
+      responses:
+        "202":
+          description: Sync started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncStatus" }
+        "409": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/sync/cancel:
+    post:
+      tags: [sync]
+      responses:
+        "202": { description: Cancellation requested }
+        "409": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/filters:
+    get:
+      tags: [portfolio]
+      summary: Facet values for filter dropdowns
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Filters" }
+              example:
+                practice_areas: ["Corporate", "Litigation", "Property"]
+                partners: [{ id: "p01", name: "Partner Alpha" }]
+                fee_earners: [{ id: "f01", name: "Fee Earner One" }]
+                offices: ["Dublin", "Limerick"]
+                opened_range: { min: "2019-01-03", max: "2026-10-05" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/controls:
+    get:
+      tags: [portfolio]
+      summary: Control definitions (from controls.yaml)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ControlDef" }
+              example:
+                - id: EL1
+                  name: "Engagement letter / s.150 notice"
+                  category: engagement
+                  description: "Engagement letter or s.150 notice filed within 14 days of first substantive document."
+                  severity: 3
+                  basis: imanage_filing
+                  configured: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/portfolio/summary:
+    get:
+      tags: [portfolio]
+      parameters:
+        - $ref: "#/components/parameters/PracticeArea"
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/FeeEarner"
+        - $ref: "#/components/parameters/Office"
+        - $ref: "#/components/parameters/MatterStatus"
+        - $ref: "#/components/parameters/OpenedFrom"
+        - $ref: "#/components/parameters/OpenedTo"
+      responses:
+        "200":
+          description: Headline portfolio metrics for the filtered scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortfolioSummary" }
+              example:
+                scope: { matters: 412, open_matters: 287 }
+                readiness: 78.4
+                high_risk_matters: 23
+                exceptions_open: 311
+                upcoming_key_dates: { d30: 6, d60: 11, d90: 19 }
+                controls:
+                  - control_id: EL1
+                    applicable: 398
+                    pass: 341
+                    late: 31
+                    missing: 22
+                    stale: 0
+                    pending: 4
+                    not_applicable: 0
+                    unknown: 0
+                    compliance_rate: 0.866
+                coverage_note: "Based on 412 workspaces visible to you in 1 library."
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/portfolio/breakdown:
+    get:
+      tags: [portfolio]
+      summary: Compliance rate per control sliced by a dimension (heatmap data)
+      parameters:
+        - name: dimension
+          in: query
+          required: true
+          schema: { type: string, enum: [practice_area, partner, fee_earner, office, opened_month] }
+        - $ref: "#/components/parameters/PracticeArea"
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/FeeEarner"
+        - $ref: "#/components/parameters/Office"
+        - $ref: "#/components/parameters/MatterStatus"
+        - $ref: "#/components/parameters/OpenedFrom"
+        - $ref: "#/components/parameters/OpenedTo"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Breakdown" }
+              example:
+                dimension: practice_area
+                rows:
+                  - key: "Corporate"
+                    label: "Corporate"
+                    matters: 120
+                    readiness: 81.2
+                    cells: [{ control_id: EL1, applicable: 118, passing: 104, compliance_rate: 0.881 }]
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/portfolio/trend:
+    get:
+      tags: [portfolio]
+      summary: Readiness / control compliance over time from snapshots
+      parameters:
+        - name: control_id
+          in: query
+          required: false
+          description: Omit or `ALL` for overall readiness
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Trend" }
+              example:
+                control_id: ALL
+                points: [{ taken_at: "2026-09-01T00:00:00Z", applicable: 4010, passing: 3100, value: 77.3 }]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/matters:
+    get:
+      tags: [matters]
+      parameters:
+        - name: q
+          in: query
+          description: Free text over client/matter code and name
+          schema: { type: string }
+        - $ref: "#/components/parameters/PracticeArea"
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/FeeEarner"
+        - $ref: "#/components/parameters/Office"
+        - $ref: "#/components/parameters/MatterStatus"
+        - $ref: "#/components/parameters/OpenedFrom"
+        - $ref: "#/components/parameters/OpenedTo"
+        - name: failing_control
+          in: query
+          description: Only matters where this control is late/missing/stale
+          schema: { type: string }
+        - name: min_risk
+          in: query
+          schema: { type: number, minimum: 0, maximum: 100 }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [risk_desc, risk_asc, opened_desc, opened_asc, activity_desc, activity_asc, matter_code]
+            default: risk_desc
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MatterPage" }
+              example:
+                total: 1
+                page: 1
+                page_size: 50
+                items:
+                  - id: "MOCK!ws-0001"
+                    client_code: "C10001"
+                    client_name: "Example Holdings Ltd (fictional)"
+                    matter_code: "C10001-0001"
+                    matter_name: "Share purchase (fictional)"
+                    practice_area: "Corporate"
+                    partner: { id: "p01", name: "Partner Alpha" }
+                    fee_earner: { id: "f01", name: "Fee Earner One" }
+                    office: "Dublin"
+                    status: open
+                    opened_at: "2025-02-11T09:00:00Z"
+                    last_activity_at: "2026-09-30T15:12:00Z"
+                    doc_count: 214
+                    risk_score: 42.9
+                    failing_controls: ["EL2", "AN1"]
+                    key_date: "2026-11-02"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/matters/{matter_id}:
+    get:
+      tags: [matters]
+      parameters:
+        - name: matter_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MatterDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/exceptions:
+    get:
+      tags: [matters]
+      summary: Flat list of failing control results (late/missing/stale)
+      parameters:
+        - name: control_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [late, missing, stale] }
+        - $ref: "#/components/parameters/PracticeArea"
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/FeeEarner"
+        - $ref: "#/components/parameters/Office"
+        - name: sort
+          in: query
+          schema: { type: string, enum: [severity_desc, days_late_desc, opened_desc], default: severity_desc }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExceptionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/key-dates:
+    get:
+      tags: [matters]
+      summary: Matters with a mapped key date in the next N days
+      parameters:
+        - name: within_days
+          in: query
+          schema: { type: integer, enum: [30, 60, 90], default: 30 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/KeyDate" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/lexcel/sample:
+    get:
+      tags: [lexcel]
+      summary: Reproducible risk-weighted file-review sample
+      parameters:
+        - name: per_fee_earner
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10, default: 2 }
+        - name: seed
+          in: query
+          description: Omit to generate a new seed (returned in response)
+          schema: { type: integer }
+        - $ref: "#/components/parameters/PracticeArea"
+        - $ref: "#/components/parameters/Office"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LexcelSample" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/settings:
+    get:
+      tags: [data]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+              example: { retention_days: 30, sample_per_fee_earner: 2, controls_file: "%APPDATA%\\BWS\\DmsAnalytics\\controls.yaml", controls_loaded_at: "2026-10-06T21:00:00Z" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      tags: [data]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SettingsUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/data/wipe:
+    post:
+      tags: [data]
+      summary: Delete all local data and the database key. Requires confirm=true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: boolean, const: true }
+      responses:
+        "204": { description: Wiped }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: session }
+    appHeader: { type: apiKey, in: header, name: X-DMS-Analytics }
+
+  parameters:
+    PracticeArea: { name: practice_area, in: query, schema: { type: string } }
+    Partner: { name: partner_id, in: query, schema: { type: string } }
+    FeeEarner: { name: fee_earner_id, in: query, schema: { type: string } }
+    Office: { name: office, in: query, schema: { type: string } }
+    MatterStatus: { name: status, in: query, schema: { type: string, enum: [open, closed, all], default: open } }
+    OpenedFrom: { name: opened_from, in: query, schema: { type: string, format: date } }
+    OpenedTo: { name: opened_to, in: query, schema: { type: string, format: date } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid session cookie or header
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [sync_running, not_found, invalid_request, not_signed_in] }
+        message: { type: string, description: Plain-English, safe to show the user }
+
+    Health:
+      type: object
+      required: [status, version, mode]
+      properties:
+        status: { type: string, const: ok }
+        version: { type: string }
+        mode: { type: string, enum: [mock, live] }
+
+    Coverage:
+      type: object
+      required: [libraries, workspaces_visible, documents]
+      properties:
+        libraries: { type: integer }
+        workspaces_visible: { type: integer }
+        documents: { type: integer }
+
+    Session:
+      type: object
+      required: [mode, signed_in, has_data, coverage]
+      properties:
+        mode: { type: string, enum: [mock, live] }
+        signed_in: { type: boolean }
+        user_display_name: { type: [string, "null"] }
+        source_name: { type: string }
+        has_data: { type: boolean }
+        last_sync_at: { type: [string, "null"], format: date-time }
+        coverage: { $ref: "#/components/schemas/Coverage" }
+
+    SignInStart:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [browser_opened, device_code, signed_in] }
+        verification_url: { type: [string, "null"] }
+        user_code: { type: [string, "null"] }
+
+    SyncRun:
+      type: object
+      required: [id, kind, status, started_at, workspaces_done, documents_seen]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [full, incremental, reconcile] }
+        status: { type: string, enum: [running, succeeded, failed, cancelled] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        workspaces_done: { type: integer }
+        workspaces_total: { type: [integer, "null"] }
+        documents_seen: { type: integer }
+        error: { type: [string, "null"] }
+
+    SyncStatus:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [idle, running, cancelling] }
+        current:
+          oneOf: [{ $ref: "#/components/schemas/SyncRun" }, { type: "null" }]
+        last:
+          oneOf: [{ $ref: "#/components/schemas/SyncRun" }, { type: "null" }]
+
+    PersonRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+
+    Filters:
+      type: object
+      required: [practice_areas, partners, fee_earners, offices]
+      properties:
+        practice_areas: { type: array, items: { type: string } }
+        partners: { type: array, items: { $ref: "#/components/schemas/PersonRef" } }
+        fee_earners: { type: array, items: { $ref: "#/components/schemas/PersonRef" } }
+        offices: { type: array, items: { type: string } }
+        opened_range:
+          type: object
+          properties:
+            min: { type: [string, "null"], format: date }
+            max: { type: [string, "null"], format: date }
+
+    ControlDef:
+      type: object
+      required: [id, name, category, description, severity, basis, configured]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        category: { type: string, enum: [file_opening, conflicts, aml, engagement, attendance, critical_dates, fees, hygiene] }
+        description: { type: string }
+        severity: { type: integer, minimum: 1, maximum: 3 }
+        basis: { type: string, enum: [imanage_filing] }
+        configured: { type: boolean, description: false when mapping is missing so all results are `unknown` }
+
+    ControlStatus:
+      type: string
+      enum: [pass, late, missing, stale, pending, not_applicable, unknown]
+
+    ControlTally:
+      type: object
+      required: [control_id, applicable, pass, late, missing, stale, pending, not_applicable, unknown, compliance_rate]
+      properties:
+        control_id: { type: string }
+        applicable: { type: integer, description: pass+late+missing+stale+pending }
+        pass: { type: integer }
+        late: { type: integer }
+        missing: { type: integer }
+        stale: { type: integer }
+        pending: { type: integer }
+        not_applicable: { type: integer }
+        unknown: { type: integer }
+        compliance_rate: { type: [number, "null"], description: "pass/(pass+late+missing+stale); null if denominator 0" }
+
+    PortfolioSummary:
+      type: object
+      required: [scope, readiness, high_risk_matters, exceptions_open, upcoming_key_dates, controls, coverage_note]
+      properties:
+        scope:
+          type: object
+          required: [matters, open_matters]
+          properties:
+            matters: { type: integer }
+            open_matters: { type: integer }
+        readiness: { type: [number, "null"], description: Mean matter readiness 0-100 }
+        high_risk_matters: { type: integer, description: risk_score >= 50 }
+        exceptions_open: { type: integer }
+        upcoming_key_dates:
+          type: object
+          required: [d30, d60, d90]
+          properties:
+            d30: { type: integer }
+            d60: { type: integer }
+            d90: { type: integer }
+        controls: { type: array, items: { $ref: "#/components/schemas/ControlTally" } }
+        coverage_note: { type: string }
+
+    BreakdownCell:
+      type: object
+      required: [control_id, applicable, passing, compliance_rate]
+      properties:
+        control_id: { type: string }
+        applicable: { type: integer }
+        passing: { type: integer }
+        compliance_rate: { type: [number, "null"] }
+
+    Breakdown:
+      type: object
+      required: [dimension, rows]
+      properties:
+        dimension: { type: string }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [key, label, matters, readiness, cells]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              matters: { type: integer }
+              readiness: { type: [number, "null"] }
+              cells: { type: array, items: { $ref: "#/components/schemas/BreakdownCell" } }
+
+    Trend:
+      type: object
+      required: [control_id, points]
+      properties:
+        control_id: { type: string }
+        points:
+          type: array
+          items:
+            type: object
+            required: [taken_at, applicable, passing, value]
+            properties:
+              taken_at: { type: string, format: date-time }
+              applicable: { type: integer }
+              passing: { type: integer }
+              value: { type: [number, "null"], description: "Readiness (ALL) or compliance % (0-100)" }
+
+    MatterSummary:
+      type: object
+      required: [id, client_code, client_name, matter_code, matter_name, practice_area, partner, fee_earner, office, status, opened_at, last_activity_at, doc_count, risk_score, failing_controls, key_date]
+      properties:
+        id: { type: string }
+        client_code: { type: string }
+        client_name: { type: string }
+        matter_code: { type: string }
+        matter_name: { type: string }
+        practice_area: { type: [string, "null"] }
+        partner: { oneOf: [{ $ref: "#/components/schemas/PersonRef" }, { type: "null" }] }
+        fee_earner: { oneOf: [{ $ref: "#/components/schemas/PersonRef" }, { type: "null" }] }
+        office: { type: [string, "null"] }
+        status: { type: string, enum: [open, closed] }
+        opened_at: { type: string, format: date-time }
+        last_activity_at: { type: [string, "null"], format: date-time }
+        doc_count: { type: integer }
+        risk_score: { type: [number, "null"] }
+        failing_controls: { type: array, items: { type: string } }
+        key_date: { type: [string, "null"], format: date }
+
+    MatterPage:
+      type: object
+      required: [total, page, page_size, items]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/MatterSummary" } }
+
+    EvidenceDoc:
+      type: object
+      required: [id, name, canonical_type, filed_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        canonical_type: { type: [string, "null"] }
+        filed_at: { type: string, format: date-time }
+
+    ControlResult:
+      type: object
+      required: [control_id, status, basis]
+      properties:
+        control_id: { type: string }
+        status: { $ref: "#/components/schemas/ControlStatus" }
+        due_at: { type: [string, "null"], format: date-time }
+        evidence_at: { type: [string, "null"], format: date-time }
+        days_late: { type: [integer, "null"] }
+        explanation: { type: string, description: Plain-English reason, e.g. "Filed 9 days after first substantive document (allowed 14)." }
+        evidence: { type: array, items: { $ref: "#/components/schemas/EvidenceDoc" } }
+        basis: { type: string, enum: [imanage_filing] }
+
+    MatterDetail:
+      allOf:
+        - $ref: "#/components/schemas/MatterSummary"
+        - type: object
+          required: [controls, timeline, doc_type_counts]
+          properties:
+            controls: { type: array, items: { $ref: "#/components/schemas/ControlResult" } }
+            timeline:
+              type: array
+              description: Key filing events, chronological
+              items:
+                type: object
+                required: [at, kind, label]
+                properties:
+                  at: { type: string, format: date-time }
+                  kind: { type: string, enum: [opened, first_substantive, evidence, key_date, last_activity] }
+                  label: { type: string }
+                  control_id: { type: [string, "null"] }
+            doc_type_counts:
+              type: array
+              items:
+                type: object
+                required: [canonical_type, count]
+                properties:
+                  canonical_type: { type: [string, "null"], description: null = unmapped/other }
+                  count: { type: integer }
+
+    ExceptionItem:
+      type: object
+      required: [matter, control_id, status, severity, explanation]
+      properties:
+        matter: { $ref: "#/components/schemas/MatterSummary" }
+        control_id: { type: string }
+        status: { type: string, enum: [late, missing, stale] }
+        severity: { type: integer }
+        days_late: { type: [integer, "null"] }
+        due_at: { type: [string, "null"], format: date-time }
+        explanation: { type: string }
+
+    ExceptionPage:
+      type: object
+      required: [total, page, page_size, items]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/ExceptionItem" } }
+
+    KeyDate:
+      type: object
+      required: [matter, key_date, days_until]
+      properties:
+        matter: { $ref: "#/components/schemas/MatterSummary" }
+        key_date: { type: string, format: date }
+        days_until: { type: integer }
+
+    LexcelSample:
+      type: object
+      required: [seed, per_fee_earner, generated_at, items]
+      properties:
+        seed: { type: integer }
+        per_fee_earner: { type: integer }
+        generated_at: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            required: [fee_earner, matters]
+            properties:
+              fee_earner: { $ref: "#/components/schemas/PersonRef" }
+              matters: { type: array, items: { $ref: "#/components/schemas/MatterSummary" } }
+
+    Settings:
+      type: object
+      required: [retention_days, sample_per_fee_earner, controls_file, controls_loaded_at]
+      properties:
+        retention_days: { type: integer, minimum: 1, maximum: 365 }
+        sample_per_fee_earner: { type: integer, minimum: 1, maximum: 10 }
+        controls_file: { type: string }
+        controls_loaded_at: { type: [string, "null"], format: date-time }
+
+    SettingsUpdate:
+      type: object
+      properties:
+        retention_days: { type: integer, minimum: 1, maximum: 365 }
+        sample_per_fee_earner: { type: integer, minimum: 1, maximum: 10 }
