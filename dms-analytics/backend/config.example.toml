@@ -1,0 +1,33 @@
+# config.toml - BWS DMS Risk Analytics
+#
+# Copy to the config folder as `config.toml`:
+#   Windows: %APPDATA%\BWS\DmsAnalytics\config.toml
+# Every value in angle brackets is a PLACEHOLDER. Real values come from BWS IT
+# (see IT-REQUEST.md and the "First live connection" checklist in README.md).
+# Never commit a filled-in copy. No secrets go in this file: there is no client
+# secret, and tokens are kept in Windows Credential Manager.
+
+[app]
+# "mock" (default, synthetic data) or "live" (iManage, after IT approval).
+mode = "mock"
+port = 8765
+# Optional: a different controls file. Default: controls.yaml next to this file.
+# controls_file = "C:\\path\\to\\controls.yaml"
+
+[imanage]
+# VERIFY(V1): cloud example "https://cloudimanage.com"; on-prem "https://dms.<firm>.ie"
+base_url = "<IMANAGE_BASE_URL>"
+# Only if sign-in is served from a different host than the API.
+# auth_base_url = "<IMANAGE_AUTH_BASE_URL>"
+customer_id = "<CUSTOMER_ID>"
+# Leave empty to use every library you can see, or list them.
+library_ids = []
+# The application (API key / client ID) registered by IT in Control Center.
+client_id = "<CLIENT_ID>"
+# VERIFY(V3): read-only scope names agreed with IT.
+scopes = ["<READ_ONLY_SCOPE>"]
+# "pkce" (browser sign-in, preferred) or "device_code" (fallback). VERIFY(V2)
+auth_flow = "pkce"
+# Courtesy limits (V4). Keep at or below what IT agrees.
+max_concurrency = 4
+page_size = 500

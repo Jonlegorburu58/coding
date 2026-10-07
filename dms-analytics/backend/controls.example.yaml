@@ -1,0 +1,70 @@
+# controls.yaml - risk-control configuration for BWS DMS Risk Analytics.
+#
+# Copy this file to the config folder as `controls.yaml`:
+#   Windows: %APPDATA%\BWS\DmsAnalytics\controls.yaml
+# and edit it there. The app validates it on load and refuses to start (with
+# a plain-English error) if anything is wrong.
+#
+# EVERY class code and custom-field number below is a PLACEHOLDER that matches
+# the synthetic "mock firm". The real values must come from BWS's iManage
+# administrator (DIAGNOSIS V6). A wrong mapping produces false "missing"
+# results (ARCHITECTURE R3).
+
+version: 1
+
+# Canonical field -> iManage profile field.
+# For client_code / matter_code / partner / fee_earner the field's
+# `<field>_description` supplies the display name.
+# Optional keys: practice_area, partner, fee_earner, office, matter_type,
+# status, key_date, opened_at, closed_at. Omit key_date to mark CD1 "unknown".
+field_map:
+  client_code: custom1
+  matter_code: custom2
+  practice_area: custom3
+  partner: custom4
+  office: custom5
+  matter_type: custom6
+  status: custom7
+  key_date: custom21
+  closed_at: custom22
+
+# Profile values that mean open / closed. Unrecognised values count as open.
+status_values:
+  open: ["OPEN", "Active"]
+  closed: ["CLOSED"]
+
+# Canonical document type -> match rules (any rule matches; within a rule all
+# given matchers must match). Matchers: class, subclass, name_regex, folder.
+# When several types match, the most specific rule wins (most matchers).
+doc_types:
+  file_opening:       [{ class: "FILEOPEN" }]
+  conflict_clearance: [{ class: "CONFLICT" }]
+  cdd:                [{ class: "AML" }, { class: "KYC" }]
+  engagement_letter:  [{ class: "ENGAGE" }]
+  engagement_signed:  [{ class: "ENGAGE", subclass: "SIGNED" }]
+  s150_notice:        [{ class: "S150" }]
+  attendance_note:    [{ class: "ATTNOTE" }]
+  costs_update:       [{ class: "COSTS" }]
+  bill:               [{ class: "BILL" }]
+
+# Classes that are NOT substantive work. The first document of any other
+# class is the "first substantive document".
+intake_classes: [FILEOPEN, CONFLICT, AML, KYC, ENGAGE, S150]
+
+# Engagement documents whose name matches one of these count as signed (EL2).
+signed_name_patterns: ["(?i)\\bsigned\\b", "(?i)countersigned"]
+
+# Matter types for which AML1/AML2 are not applicable.
+aml_exempt_matter_types: ["INTERNAL"]
+
+thresholds:
+  FO1_days: 5
+  EL1_days: 14
+  AML2_months: 36
+  AN1_days: 90
+  FE1_months: 12
+  FE2_months: 6
+  HY1_months: 12
+
+# 1 = low, 3 = high. Used for the matter risk score.
+severity: { FO1: 2, CF1: 3, AML1: 3, AML2: 2, EL1: 3, EL2: 2, AN1: 1, CD1: 2, FE1: 2, FE2: 1, HY1: 1 }

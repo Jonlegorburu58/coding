@@ -1,0 +1,68 @@
+[project]
+name = "dms-analytics"
+version = "1.0.0"
+description = "BWS DMS risk analytics: read-only iManage metadata sync, controls engine and local API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.8",
+    "duckdb>=1.4.1",
+    "httpx>=0.27",
+    "keyring>=25",
+    "pyyaml>=6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "jsonschema>=4.23",
+    "openapi-spec-validator>=0.7",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-pyyaml",
+    "types-jsonschema>=4.26.0.20261006",
+]
+
+[project.scripts]
+dms-analytics = "dms_analytics.__main__:main"
+dms-analytics-dev = "dms_analytics.__main__:dev_main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dms_analytics"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning:starlette.*", "ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "ASYNC"]
+ignore = ["S101", "S311", "SIM105"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "S608"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["dms_analytics"]
+
+[[tool.mypy.overrides]]
+module = ["keyring", "keyring.*"]
+ignore_missing_imports = true

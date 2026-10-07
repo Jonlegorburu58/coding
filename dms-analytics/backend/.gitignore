@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.spec
+# local data and real configuration must never be committed
+*.duckdb
+*.duckdb.wal
+dev-secrets.json
+config.toml
+controls.yaml
