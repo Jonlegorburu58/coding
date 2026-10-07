@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /**
  * The strict CSP lives in index.html and ships unchanged in every build.
@@ -20,17 +21,29 @@ function devCspRelax(): Plugin {
   };
 }
 
+/** Demo build only: drop the CSP meta, because the page is inlined into one file. */
+function demoStripCsp(): Plugin {
+  return {
+    name: 'demo-strip-csp',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(/\s*<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, '');
+    },
+  };
+}
+
 const LOCAL_API = 'http://127.0.0.1:8765';
 
 export default defineConfig(({ mode }) => {
   const isMock = mode === 'mock';
+  const isDemo = mode === 'demo';
   return {
-    plugins: [react(), devCspRelax()],
+    plugins: [react(), devCspRelax(), ...(isDemo ? [demoStripCsp(), viteSingleFile()] : [])],
     // The MSW service worker is only published in mock builds; production
     // builds have no public directory at all.
     publicDir: isMock ? 'mock-public' : false,
     build: {
-      outDir: 'dist',
+      outDir: isDemo ? 'dist-demo' : 'dist',
       sourcemap: false,
       chunkSizeWarningLimit: 900,
     },

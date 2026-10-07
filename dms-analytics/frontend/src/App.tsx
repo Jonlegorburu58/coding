@@ -1,5 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router';
+
+// The demo build is hosted at an arbitrary path, so it routes by hash.
+const Router = import.meta.env.MODE === 'demo' ? HashRouter : BrowserRouter;
 import { QueryClientProvider, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { onSessionExpired } from './api/client';
 import { makeQueryClient } from './queryClient';
@@ -53,9 +56,9 @@ export function Providers({ children, client }: { children: ReactNode; client?: 
 export function App() {
   return (
     <Providers>
-      <BrowserRouter>
+      <Router>
         <AppShell />
-      </BrowserRouter>
+      </Router>
     </Providers>
   );
 }

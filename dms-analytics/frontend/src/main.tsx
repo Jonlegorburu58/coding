@@ -9,6 +9,10 @@ async function boot() {
     const { startMockApi } = await import('./mocks/browser');
     await startMockApi();
   }
+  if (import.meta.env.MODE === 'demo') {
+    const { startDemoApi } = await import('./mocks/demo');
+    startDemoApi();
+  }
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

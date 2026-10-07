@@ -9,6 +9,7 @@
     "dev:mock": "vite --mode mock",
     "build": "tsc --noEmit && vite build",
     "build:mock": "vite build --mode mock --outDir dist-mock",
+    "build:demo": "vite build --mode demo",
     "preview:mock": "vite preview --mode mock --outDir dist-mock --port 5174 --strictPort",
     "build:embed": "npm run build && node scripts/embed.mjs",
     "typecheck": "tsc --noEmit",
@@ -47,6 +48,7 @@
     "typescript": "~5.9",
     "typescript-eslint": "^8.71.1",
     "vite": "^8.3.3",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^5.0.3"
   }
 }
