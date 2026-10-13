@@ -12,9 +12,11 @@ dependencies = [
     "httpx>=0.27.0",
     "requests>=2.31.0",
     "requests-ntlm>=1.3.0",
-    "requests-kerberos>=0.15.0",
+    "requests-negotiate-sspi>=0.5.2; sys_platform == 'win32'",
+    "requests-kerberos>=0.15.0; sys_platform != 'win32'",
     "pydantic>=2.0.0",
 ]
 
 [project.scripts]
 bws-risk-mcp = "bws_risk_mcp.server:main"
+bws-risk-diagnose = "bws_risk_mcp.diagnose:main"

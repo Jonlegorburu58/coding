@@ -55,34 +55,53 @@ class IManageClient:
     def _configure_auth(self) -> None:
         method = self.config.auth_method.lower()
 
-        if method in ("negotiate", "kerberos"):
-            try:
-                from requests_kerberos import HTTPKerberosAuth, OPTIONAL
-                self.session.auth = HTTPKerberosAuth(
-                    mutual_authentication=OPTIONAL
+        if method in ("negotiate", "sspi"):
+            # The only method that signs in as the current Windows user
+            # with no password, via SSPI. This is true Windows SSO.
+            if self._setup_sspi():
+                return
+            logger.warning("SSPI unavailable, falling back to Kerberos")
+            if self._setup_kerberos():
+                return
+            logger.warning("Kerberos unavailable, falling back to NTLM")
+            self._setup_ntlm()
+        elif method == "kerberos":
+            if not self._setup_kerberos():
+                raise AuthenticationError(
+                    "Kerberos requested but requests_kerberos is not installed"
                 )
-                logger.info("Using Kerberos/Negotiate authentication")
-            except ImportError:
-                logger.warning(
-                    "requests_kerberos not available, falling back to NTLM"
-                )
-                self._setup_ntlm()
         elif method == "ntlm":
             self._setup_ntlm()
         else:
             raise AuthenticationError(f"Unknown auth method: {method}")
+
+    def _setup_sspi(self) -> bool:
+        try:
+            from requests_negotiate_sspi import HttpNegotiateAuth
+        except ImportError:
+            return False
+        # Uses the current logged-in Windows account token. No password.
+        self.session.auth = HttpNegotiateAuth()
+        logger.info("Using Negotiate (SSPI) as the current Windows user")
+        return True
+
+    def _setup_kerberos(self) -> bool:
+        try:
+            from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+        except ImportError:
+            return False
+        self.session.auth = HTTPKerberosAuth(mutual_authentication=OPTIONAL)
+        logger.info("Using Kerberos authentication")
+        return True
 
     def _setup_ntlm(self) -> None:
         import getpass
         import os
         domain = os.environ.get("USERDOMAIN", "")
         user = os.environ.get("USERNAME", getpass.getuser())
-        if domain:
-            ntlm_user = f"{domain}\\{user}"
-        else:
-            ntlm_user = user
-        # NTLM with empty password uses current Windows session credentials
-        # via SSPI on Windows (requests_ntlm handles this automatically)
+        ntlm_user = f"{domain}\\{user}" if domain else user
+        # Note: NTLM here needs real credentials; a blank password does not
+        # pass through the Windows session. Prefer "negotiate" (SSPI) above.
         self.session.auth = HttpNtlmAuth(ntlm_user, "")
         logger.info("Using NTLM authentication as %s", ntlm_user)
 

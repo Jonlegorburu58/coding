@@ -124,6 +124,30 @@ All tools are **read-only**. There are no write operations.
 - **No document content by default.** The server reads metadata (profiles,
   dates, classes). It does not download document content.
 
+## If it won't connect: run the diagnostic
+
+The on-premises server's exact API path and accepted sign-in method vary
+between firms. Instead of guessing, run the built-in diagnostic on the
+laptop (on the firm network). It is read-only — it only sends GET requests
+to listing endpoints — and it tries every combination, then saves the one
+that works:
+
+```
+bws-risk-diagnose
+```
+
+It prints a table like this and writes the working config for you:
+
+```
+  WORKS -> negotiate  /work/api/v2/libraries       OK (14 items)
+```
+
+Then restart Claude Desktop. If nothing works, the table tells you why:
+all `404` means the base URL is wrong (check the URL your browser shows in
+iManage); all `401` means the API wants an OAuth token rather than your
+Windows sign-in (that needs the app registered in iManage Control Center);
+`ssl-error` means an internal CA — re-run with `bws-risk-diagnose --no-verify`.
+
 ## Troubleshooting
 
 ### "Authentication failed"
