@@ -1,0 +1,13 @@
+data/
+inbox/
+__pycache__/
+*.sqlite*
+*.log
+*.jpg
+*.png
+*.csv
+*.local.*
+claude-mcp-entry.json
+pilot-report.json
+github-backup.json
+README.txt
